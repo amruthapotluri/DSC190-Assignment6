@@ -17,7 +17,7 @@ def parse(s: str, today: date | None = None) -> date:
     s = s.lower().strip()
     base_dt = datetime.combine(today, datetime.min.time())
 
-    # 1. Handle Holidays
+    # 1. Handle Holidays manually
     for holiday, (month, day) in HOLIDAYS.items():
         if holiday in s:
             year_match = re.search(r"\b(20\d{2})\b", s)
@@ -27,17 +27,26 @@ def parse(s: str, today: date | None = None) -> date:
     # 2. Handle "X before/after Y"
     match = re.search(r"(.+?)\s+\b(before|after)\b\s+(.+)", s)
     if match:
-        offset_str, direction, anchor_str = match.groups()
+        offset_str = match.group(1).strip()
+        direction = match.group(2).strip()
+        anchor_str = match.group(3).strip()
+
+        # Resolve anchor (e.g., "yesterday")
         anchor_date = parse(anchor_str, today=today)
+
+        # Calculate offset delta
         ref = datetime(2000, 1, 1)
         offset_dt = dateparser.parse(
             f"{offset_str} ago", settings={"RELATIVE_BASE": ref}
         )
+
         if offset_dt:
             delta = relativedelta(ref, offset_dt)
-            return anchor_date - delta if direction == "before" else anchor_date + delta
+            if direction == "before":
+                return anchor_date - delta
+            return anchor_date + delta
 
-    # 3. Handle "next [weekday]" - Force to the following week
+    # 3. Handle "next [weekday]" with your specific logic
     weekday_map = {
         "monday": 0,
         "tuesday": 1,
@@ -47,20 +56,32 @@ def parse(s: str, today: date | None = None) -> date:
         "saturday": 5,
         "sunday": 6,
     }
+
     next_match = re.match(
         r"next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", s
     )
     if next_match:
         target_wd = weekday_map[next_match.group(1)]
-        days_ahead = (target_wd - today.weekday()) % 7
-        return today + timedelta(days=days_ahead + 7)
+        current_wd = today.weekday()
+        days_ahead = (target_wd - current_wd) % 7
 
-    # 4. Fallback
+        # If the result is 0 (it's today), add 7
+        if days_ahead == 0:
+            return today + timedelta(days=7)
+        # Else if today is Sunday (6) or Monday (0), add 7
+        elif current_wd in [6, 0]:
+            return today + timedelta(days=days_ahead + 7)
+        # Else just do modulus
+        else:
+            return today + timedelta(days=days_ahead)
+
+    # 4. Fallback using dateparser
     settings = {
         "RELATIVE_BASE": base_dt,
         "PREFER_DATES_FROM": "future",
         "PREFER_DAY_OF_MONTH": "first",
     }
+
     parsed_dt = dateparser.parse(s, settings=settings)
     if parsed_dt:
         return parsed_dt.date()
