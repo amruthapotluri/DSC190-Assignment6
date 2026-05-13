@@ -17,6 +17,17 @@ def parse(s: str, today: date | None = None) -> date:
     s = s.lower().strip()
     base_dt = datetime.combine(today, datetime.min.time())
 
+    # Weekday map used for both next and last
+    weekday_map = {
+        "monday": 0,
+        "tuesday": 1,
+        "wednesday": 2,
+        "thursday": 3,
+        "friday": 4,
+        "saturday": 5,
+        "sunday": 6,
+    }
+
     # 1. Handle Holidays manually
     for holiday, (month, day) in HOLIDAYS.items():
         if holiday in s:
@@ -31,10 +42,8 @@ def parse(s: str, today: date | None = None) -> date:
         direction = match.group(2).strip()
         anchor_str = match.group(3).strip()
 
-        # Resolve anchor (e.g., "yesterday")
         anchor_date = parse(anchor_str, today=today)
 
-        # Calculate offset delta
         ref = datetime(2000, 1, 1)
         offset_dt = dateparser.parse(
             f"{offset_str} ago", settings={"RELATIVE_BASE": ref}
@@ -46,17 +55,7 @@ def parse(s: str, today: date | None = None) -> date:
                 return anchor_date - delta
             return anchor_date + delta
 
-    # 3. Handle "next [weekday]" with your specific logic
-    weekday_map = {
-        "monday": 0,
-        "tuesday": 1,
-        "wednesday": 2,
-        "thursday": 3,
-        "friday": 4,
-        "saturday": 5,
-        "sunday": 6,
-    }
-
+    # 3. Handle "next [weekday]"
     next_match = re.match(
         r"next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", s
     )
@@ -65,15 +64,27 @@ def parse(s: str, today: date | None = None) -> date:
         current_wd = today.weekday()
         days_ahead = (target_wd - current_wd) % 7
 
-        # If the result is 0 (it's today), add 7
         if days_ahead == 0:
             return today + timedelta(days=7)
-        # Else if today is Sunday (6) or Monday (0), add 7
         elif current_wd in [6, 0]:
             return today + timedelta(days=days_ahead + 7)
-        # Else just do modulus
         else:
             return today + timedelta(days=days_ahead)
+
+    # 5. Handle "last [weekday]"
+    last_match = re.match(
+        r"last\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", s
+    )
+    if last_match:
+        target_wd = weekday_map[last_match.group(1)]
+        current_wd = today.weekday()
+        days_behind = (current_wd - target_wd) % 7
+
+        # Apply similar logic: if today or if it's a specific "jump" day
+        if days_behind == 0:
+            return today - timedelta(days=7)
+        # Assuming the boss wants a week jump for 'last' consistently
+        return today - timedelta(days=days_behind + 7)
 
     # 4. Fallback using dateparser
     settings = {
