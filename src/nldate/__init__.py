@@ -85,18 +85,15 @@ def parse(s: str, today: date | None = None) -> date:
     parsed_dt = dateparser.parse(s, settings=settings)
     if parsed_dt:
         return parsed_dt.date()
-    
+
     # 5. Handle "last [weekday]"
-    last_match = re.match(
-        r"last\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", s
-    )
+    last_match = re.match( r"last\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", s)
     if last_match:
         target_wd = weekday_map[last_match.group(1)]
         current_wd = today.weekday()
         days_behind = (current_wd - target_wd) % 7
         if days_behind == 0:
             return today - timedelta(days=7)
-        return today - timedelta(days=days_behind + 7)
+        return today - timedelta(days=days_behind)
 
     raise ValueError(f"Could not parse date string: {s}")
-
