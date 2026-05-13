@@ -17,3 +17,6 @@ dev = [
     "types-dateparser>=1.4.0.20260508",
     "types-python-dateutil>=2.9.0.20260508",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nldate"]
