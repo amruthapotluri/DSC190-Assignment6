@@ -87,7 +87,9 @@ def parse(s: str, today: date | None = None) -> date:
         return parsed_dt.date()
 
     # 5. Handle "last [weekday]"
-    last_match = re.match( r"last\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", s)
+    last_match = re.match(
+        r"last\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", s
+    )
     if last_match:
         target_wd = weekday_map[last_match.group(1)]
         current_wd = today.weekday()
