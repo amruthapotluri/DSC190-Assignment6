@@ -47,7 +47,8 @@ def parse(s: str, today: date | None = None) -> date:
     if next_match:
         target_wd = weekday_map[next_match.group(1)]
         days_ahead = (target_wd - today.weekday()) % 7
-        if days_ahead == 0: days_ahead = 7
+        if days_ahead == 0: 
+            days_ahead = 7
         # "Next" usually implies the one after the upcoming one if days_ahead is small, 
         # but the test expects Jan 9 from Jan 1 (which is +8 days).
         return today + timedelta(days=days_ahead + 7 if days_ahead < 7 else days_ahead)

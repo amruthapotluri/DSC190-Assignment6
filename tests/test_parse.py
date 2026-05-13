@@ -1,5 +1,4 @@
 from datetime import date
-import pytest
 from nldate import parse
 
 def test_absolute_date():
