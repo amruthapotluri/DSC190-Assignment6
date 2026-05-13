@@ -1,92 +1,60 @@
-import re
-from datetime import date, datetime, timedelta
-
-import dateparser
-from dateutil.relativedelta import relativedelta
-
-HOLIDAYS = {
-    "christmas": (12, 25),
-    "halloween": (10, 31),
-    "new years": (1, 1),
-}
-
-WEEKDAYS = {
-    "monday": 0,
-    "tuesday": 1,
-    "wednesday": 2,
-    "thursday": 3,
-    "friday": 4,
-    "saturday": 5,
-    "sunday": 6,
-}
+from datetime import date
+from nldate import parse
 
 
-def parse(s: str, today: date | None = None) -> date:
-    if today is None:
-        today = date.today()
+def test_absolute_date():
+    assert parse("December 1st, 2025") == date(2025, 12, 1)
 
-    s = s.lower().strip()
-    base_dt = datetime.combine(today, datetime.min.time())
 
-    # ----------------------------
-    # 1. Holidays
-    # ----------------------------
-    for holiday, (month, day) in HOLIDAYS.items():
-        if holiday in s:
-            year_match = re.search(r"\b(20\d{2})\b", s)
-            year = int(year_match.group(1)) if year_match else today.year
-            return date(year, month, day)
+def test_relative_days_before():
+    today = date(2025, 12, 1)
+    assert parse("5 days before December 1st, 2025", today=today) == date(2025, 11, 26)
 
-    # ----------------------------
-    # 2. "next <weekday>"  (IMPORTANT FIX)
-    # ----------------------------
-    m = re.fullmatch(
-        r"next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", s
-    )
-    if m:
-        target = WEEKDAYS[m.group(1)]
-        current = today.weekday()
 
-        days_ahead = (target - current + 7) % 7
-        if days_ahead == 0:
-            days_ahead = 7
-
-        return today + timedelta(days=days_ahead)
-
-    # ----------------------------
-    # 3. "X before/after Y"
-    # ----------------------------
-    match = re.search(r"(.+?)\s+(before|after)\s+(.+)", s)
-    if match:
-        offset_str = match.group(1).strip()
-        direction = match.group(2).strip()
-        anchor_str = match.group(3).strip()
-
-        anchor_date = parse(anchor_str, today=today)
-
-        ref = datetime(2000, 1, 1)
-        offset_dt = dateparser.parse(
-            f"{offset_str} ago",
-            settings={"RELATIVE_BASE": ref},
-        )
-
-        if offset_dt:
-            delta = relativedelta(ref, offset_dt)
-            return anchor_date - delta if direction == "before" else anchor_date + delta
-
-    # ----------------------------
-    # 4. Fallback (dateparser)
-    # ----------------------------
-    parsed_dt = dateparser.parse(
-        s,
-        settings={
-            "RELATIVE_BASE": base_dt,
-            "PREFER_DATES_FROM": "future",
-            "PREFER_DAY_OF_MONTH": "first",
-        },
+def test_relative_to_yesterday():
+    today = date(2025, 5, 20)
+    # "yesterday" would be 2025-05-19. 1 year and 2 months after that:
+    assert parse("1 year and 2 months after yesterday", today=today) == date(
+        2026, 7, 19
     )
 
-    if parsed_dt:
-        return parsed_dt.date()
 
-    raise ValueError(f"Could not parse date string: {s}")
+def test_next_tuesday():
+    today = date(2024, 1, 1)  # This is a Monday
+    assert parse("next Tuesday", today=today) == date(2024, 1, 9)
+
+
+def test_tomorrow():
+    today = date(2026, 5, 12)
+    assert parse("tomorrow", today=today) == date(2026, 5, 13)
+
+
+def test_day_after_tomorrow():
+    today = date(2026, 5, 12)
+    assert parse("the day after tomorrow", today=today) == date(2026, 5, 14)
+
+
+def test_formal_slashes():
+    # Testing standard numeric formats
+    assert parse("12/25/2026") == date(2026, 12, 25)
+
+
+def test_iso_format():
+    # Testing ISO-style formats
+    assert parse("2026-10-31") == date(2026, 10, 31)
+
+
+def test_weeks_from_now():
+    today = date(2026, 1, 1)
+    assert parse("3 weeks from now", today=today) == date(2026, 1, 22)
+
+
+def test_months_ago():
+    today = date(2026, 6, 15)
+    # Testing simple subtraction without the "before" keyword
+    assert parse("2 months ago", today=today) == date(2026, 4, 15)
+
+
+def test_specific_holiday():
+    # dateparser usually handles major holidays
+    assert parse("Christmas 2026") == date(2026, 12, 25)
