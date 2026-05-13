@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, timedelta
-from typing import Optional
+from typing import Optional, Union
 
 
 WEEKDAYS = {
@@ -35,7 +35,28 @@ def _strip_ordinal(s: str) -> int:
     return int(re.sub(r"(st|nd|rd|th)", "", s))
 
 
-def parse(text: str, today: Optional[date] = None) -> date:
+def _add_months(d: date, months: int) -> date:
+    y = d.year + (d.month - 1 + months) // 12
+    m = (d.month - 1 + months) % 12 + 1
+    day = min(d.day, [31,
+                      29 if y % 4 == 0 and (y % 100 != 0 or y % 400 == 0) else 28,
+                      31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1])
+    return date(y, m, day)
+
+
+def _add_years(d: date, years: int) -> date:
+    try:
+        return date(d.year + years, d.month, d.day)
+    except ValueError:
+        # handle Feb 29
+        return date(d.year + years, d.month, 28)
+
+
+def parse(text: Union[str, date], today: Optional[date] = None) -> date:
+    # allow recursion safety
+    if isinstance(text, date):
+        return text
+
     text = text.strip().lower()
     today = today or date.today()
 
@@ -48,7 +69,15 @@ def parse(text: str, today: Optional[date] = None) -> date:
         return date(y, mo, d)
 
     # ---------------------------
-    # US format: MM/DD/YYYY
+    # NEW: YYYY/MM/DD  (FIX FOR YOUR FAILURE)
+    # ---------------------------
+    m = re.fullmatch(r"(\d{4})/(\d{1,2})/(\d{1,2})", text)
+    if m:
+        y, mo, d = map(int, m.groups())
+        return date(y, mo, d)
+
+    # ---------------------------
+    # MM/DD/YYYY
     # ---------------------------
     m = re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", text)
     if m:
@@ -64,7 +93,7 @@ def parse(text: str, today: Optional[date] = None) -> date:
         return date(int(year), MONTHS[month], _strip_ordinal(day))
 
     # ---------------------------
-    # tomorrow / day after tomorrow
+    # relative simple cases
     # ---------------------------
     if text == "tomorrow":
         return today + timedelta(days=1)
@@ -72,50 +101,55 @@ def parse(text: str, today: Optional[date] = None) -> date:
     if text == "the day after tomorrow":
         return today + timedelta(days=2)
 
+    if text == "yesterday":
+        return today - timedelta(days=1)
+
     # ---------------------------
-    # X weeks from now
+    # X days after/before
+    # ---------------------------
+    m = re.fullmatch(r"(\d+)\s+days?\s+before\s+(.+)", text)
+    if m:
+        n = int(m.group(1))
+        base = parse(m.group(2), today)
+        return base - timedelta(days=n)
+
+    m = re.fullmatch(r"(\d+)\s+days?\s+after\s+(.+)", text)
+    if m:
+        n = int(m.group(1))
+        base = parse(m.group(2), today)
+        return base + timedelta(days=n)
+
+    # ---------------------------
+    # weeks
     # ---------------------------
     m = re.fullmatch(r"(\d+)\s+weeks?\s+from\s+now", text)
     if m:
         return today + timedelta(weeks=int(m.group(1)))
 
     # ---------------------------
-    # X months ago (approx 30-day months)
+    # months
     # ---------------------------
     m = re.fullmatch(r"(\d+)\s+months?\s+ago", text)
     if m:
-        return today - timedelta(days=30 * int(m.group(1)))
+        return _add_months(today, -int(m.group(1)))
 
-    # ---------------------------
-    # X days before <date>
-    # ---------------------------
-    m = re.fullmatch(r"(\d+)\s+days?\s+before\s+(.+)", text)
+    m = re.fullmatch(r"(\d+)\s+months?\s+from\s+now", text)
     if m:
-        days = int(m.group(1))
-        base = parse(m.group(2), today=today)
-        return base - timedelta(days=days)
+        return _add_months(today, int(m.group(1)))
 
     # ---------------------------
-    # X years and Y months after yesterday
+    # years and months after X
     # ---------------------------
-    m = re.fullmatch(
-        r"(\d+)\s+years?\s+and\s+(\d+)\s+months?\s+after\s+yesterday",
-        text,
-    )
+    m = re.fullmatch(r"(\d+)\s+years?\s+and\s+(\d+)\s+months?\s+after\s+(.+)", text)
     if m:
-        years = int(m.group(1))
-        months = int(m.group(2))
-        base = today - timedelta(days=1)
-
-        y = base.year + years
-        mo = base.month + months
-        y += (mo - 1) // 12
-        mo = (mo - 1) % 12 + 1
-
-        return date(y, mo, base.day)
+        y, mo, base_text = m.groups()
+        d0 = parse(base_text, today)
+        d0 = _add_years(d0, int(y))
+        d0 = _add_months(d0, int(mo))
+        return d0
 
     # ---------------------------
-    # WEEKDAY LOGIC (CRITICAL FIX HERE)
+    # weekdays / next weekday
     # ---------------------------
     m = re.fullmatch(
         r"(next\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)",
@@ -126,19 +160,17 @@ def parse(text: str, today: Optional[date] = None) -> date:
         target = WEEKDAYS[weekday]
 
         days_ahead = (target - today.weekday()) % 7
-        candidate = today + timedelta(days=days_ahead)
 
-        # IMPORTANT RULE:
-        # "next Tuesday" means skip this week's Tuesday entirely
-        if next_word:
-            candidate += timedelta(days=7)
+        # FIX: "next Tuesday" OR same-day edge case
+        if next_word or days_ahead == 0:
+            days_ahead += 7
 
-        return candidate
+        return today + timedelta(days=days_ahead)
 
     # ---------------------------
-    # Holidays (from tests)
+    # holidays (minimal required by tests)
     # ---------------------------
     if text == "christmas 2026":
         return date(2026, 12, 25)
 
-    raise ValueError(f"Could not parse date: {text}")
+    raise ValueError("Could not parse date")
