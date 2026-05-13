@@ -43,8 +43,6 @@ def parse(s: str, today: date | None = None) -> date:
             delta = relativedelta(ref, offset_dt)
             return anchor_date - delta if direction == "before" else anchor_date + delta
 
-    parsed_dt = dateparser.parse(s, settings=settings)
-
     # 4. Standard fallback
     settings = {
         "RELATIVE_BASE": base_dt,
