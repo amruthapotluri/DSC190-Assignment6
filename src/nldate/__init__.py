@@ -28,37 +28,35 @@ def parse(s: str, today: date | None = None) -> date:
     s = s.lower().strip()
     base_dt = datetime.combine(today, datetime.min.time())
 
-    # -------------------------
+    # ----------------------------
     # 1. Holidays
-    # -------------------------
+    # ----------------------------
     for holiday, (month, day) in HOLIDAYS.items():
         if holiday in s:
             year_match = re.search(r"\b(20\d{2})\b", s)
             year = int(year_match.group(1)) if year_match else today.year
             return date(year, month, day)
 
-    # -------------------------
-    # 2. "next <weekday>"
-    # -------------------------
-    match = re.fullmatch(
-        r"next (monday|tuesday|wednesday|thursday|friday|saturday|sunday)",
-        s,
+    # ----------------------------
+    # 2. "next <weekday>"  (IMPORTANT FIX)
+    # ----------------------------
+    m = re.fullmatch(
+        r"next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", s
     )
+    if m:
+        target = WEEKDAYS[m.group(1)]
+        current = today.weekday()
 
-    if match:
-        target_weekday = WEEKDAYS[match.group(1)]
-        current_weekday = today.weekday()
-
-        # always go to NEXT week's weekday
-        days_ahead = (7 - current_weekday) + target_weekday
+        days_ahead = (target - current + 7) % 7
+        if days_ahead == 0:
+            days_ahead = 7
 
         return today + timedelta(days=days_ahead)
 
-    # -------------------------
+    # ----------------------------
     # 3. "X before/after Y"
-    # -------------------------
+    # ----------------------------
     match = re.search(r"(.+?)\s+(before|after)\s+(.+)", s)
-
     if match:
         offset_str = match.group(1).strip()
         direction = match.group(2).strip()
@@ -74,15 +72,11 @@ def parse(s: str, today: date | None = None) -> date:
 
         if offset_dt:
             delta = relativedelta(ref, offset_dt)
+            return anchor_date - delta if direction == "before" else anchor_date + delta
 
-            if direction == "before":
-                return anchor_date - delta
-            else:
-                return anchor_date + delta
-
-    # -------------------------
+    # ----------------------------
     # 4. Fallback (dateparser)
-    # -------------------------
+    # ----------------------------
     parsed_dt = dateparser.parse(
         s,
         settings={
