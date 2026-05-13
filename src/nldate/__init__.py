@@ -56,7 +56,7 @@ def parse(s: str, today: date | None = None) -> date:
     }
 
     next_match = re.match(
-        r"next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", s
+        r"next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)",s
     )
     if next_match:
         target_wd = weekday_map[next_match.group(1)]
