@@ -55,7 +55,8 @@ def parse(s: str, today: date | None = None) -> date:
     }
 
     next_match = re.match(
-        r"next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", s,
+        r"next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)",
+        s,
     )
 
     if next_match:
@@ -64,9 +65,10 @@ def parse(s: str, today: date | None = None) -> date:
 
         days_ahead = (target_wd - current_wd) % 7
 
-        # If it's the same weekday, move to next week
         if days_ahead == 0:
             days_ahead = 7
+        else:
+            days_ahead += 7
 
         return today + timedelta(days=days_ahead)
 
